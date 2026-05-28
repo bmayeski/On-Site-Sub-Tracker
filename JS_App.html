@@ -1,0 +1,125 @@
+<script>
+/* ============================================================
+   JS_App.html — IEP Sub Tracker | App Core & State Management
+   ============================================================ */
+
+const App = (() => {
+
+  // ── State ────────────────────────────────────────────────────
+  const state = {
+    teachers:       [],
+    subs:           [],
+    scheduleTypes:  [],
+    periodTimes:    [],
+    iepRequests:    [],
+    masterSchedule: [],
+    currentView:    "dashboard",
+    isLoading:      true,
+  };
+
+  // ── Getters ──────────────────────────────────────────────────
+  function getState() { return state; }
+
+  function updateState(key, value) {
+    state[key] = value;
+  }
+
+  // ── Initialization ───────────────────────────────────────────
+  function init() {
+    // Set today's date chip
+    const today = new Date();
+    const options = { weekday: "short", month: "short", day: "numeric", year: "numeric" };
+    document.getElementById("today-chip").textContent = today.toLocaleDateString("en-US", options);
+
+    // Load all data from server
+    google.script.run
+      .withSuccessHandler(onDataLoaded)
+      .withFailureHandler(onLoadError)
+      .getAllData();
+  }
+
+  function onDataLoaded(data) {
+    state.teachers       = data.teachers       || [];
+    state.subs           = data.subs           || [];
+    state.scheduleTypes  = data.scheduleTypes  || [];
+    state.periodTimes    = data.periodTimes    || [];
+    state.iepRequests    = data.iepRequests    || [];
+    state.masterSchedule = data.masterSchedule || [];
+    state.isLoading      = false;
+
+    navigate("dashboard");
+  }
+
+  function onLoadError(err) {
+    document.getElementById("initial-loader").innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon" style="color:var(--red)">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        </div>
+        <h3>Failed to load data</h3>
+        <p>${err.message || "An error occurred. Please refresh the page."}</p>
+        <button class="btn btn-primary btn-sm" onclick="location.reload()">Retry</button>
+      </div>
+    `;
+  }
+
+  // ── Routing ──────────────────────────────────────────────────
+  function navigate(view) {
+    state.currentView = view;
+
+    // Update nav
+    document.querySelectorAll(".nav-item").forEach(el => {
+      el.classList.toggle("active", el.dataset.view === view);
+    });
+
+    // Update page title
+    const titles = {
+      "dashboard":      "Dashboard",
+      "new-iep":        "New IEP Request",
+      "upcoming":       "Upcoming Dates",
+      "history":        "Past Records",
+      "admin-people":   "Teachers & Subs",
+      "admin-schedule": "Schedule & Periods",
+      "admin-master":   "Master Schedule",
+    };
+    document.getElementById("page-title").textContent = titles[view] || view;
+
+    // Render view
+    const container = document.getElementById("view-container");
+    container.innerHTML = "";
+
+    switch (view) {
+      case "dashboard":      UI.renderDashboard(container);      break;
+      case "new-iep":        UI.renderNewIEP(container);         break;
+      case "upcoming":       UI.renderUpcoming(container);       break;
+      case "history":        UI.renderHistory(container);        break;
+      case "admin-people":   AdminPanel.renderPeople(container); break;
+      case "admin-schedule": AdminPanel.renderSchedule(container); break;
+      case "admin-master":   AdminPanel.renderMaster(container); break;
+      default:               UI.renderDashboard(container);
+    }
+
+    // Close mobile sidebar
+    document.getElementById("sidebar").classList.remove("open");
+  }
+
+  // ── Server Calls ─────────────────────────────────────────────
+  function refreshData(callback) {
+    google.script.run
+      .withSuccessHandler(data => {
+        onDataLoaded(data);
+        if (callback) callback();
+      })
+      .withFailureHandler(err => UI.toast("Failed to refresh: " + err.message, "error"))
+      .getAllData();
+  }
+
+  return { init, getState, updateState, navigate, refreshData };
+
+})();
+
+// ── Boot ─────────────────────────────────────────────────────
+window.addEventListener("load", () => App.init());
+</script>
