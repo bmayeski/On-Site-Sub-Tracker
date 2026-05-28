@@ -1,382 +1,225 @@
 <script>
 /* ============================================================
-   JS_IEPService.html — IEP Requests, Period Highlighting,
-                        Sub Assignment
+   JS_PrintService.html — Daily Sub Printout Generation
    ============================================================ */
 
-const IEPService = (() => {
+const PrintService = (() => {
 
-  // ── Internal state for new IEP form ──────────────────────────
-  let _formState = {
-    selectedPeriods:   [],
-    highlightedPeriods: [],
-    selectedSchedule:  "regular",
-    selectedTeacher:   null,
-  };
+  // ── Open print date picker modal ─────────────────────────────
+  function openModal() {
+    const today = new Date();
+    const yyyy  = today.getFullYear();
+    const mm    = String(today.getMonth() + 1).padStart(2, "0");
+    const dd    = String(today.getDate()).padStart(2, "0");
+    const todayStr = `${yyyy}-${mm}-${dd}`;
 
-  function resetForm() {
-    _formState = {
-      selectedPeriods:    [],
-      highlightedPeriods: [],
-      selectedSchedule:   "regular",
-      selectedTeacher:    null,
-    };
-  }
+    UI.openModalWith(`
+      <h2 style="font-family:var(--font-display);font-size:20px;margin-bottom:6px;">Print Daily Sub Sheet</h2>
+      <p style="color:var(--text-3);font-size:13px;margin-bottom:24px;">Select a date to generate the sub assignment printout.</p>
 
-  function getFormState() { return _formState; }
-
-  // ── Build the New IEP HTML ───────────────────────────────────
-  function renderNewIEPForm(container) {
-    resetForm();
-    const { teachers, subs, scheduleTypes } = App.getState();
-
-    const scheduleOptions = scheduleTypes
-      .map(s => `<option value="${s.ID}">${s.Name}</option>`)
-      .join("");
-
-    const teacherOptions = teachers.length
-      ? teachers.map(t => `<option value="${t.ID}">${t.Name}</option>`).join("")
-      : `<option value="">No teachers found</option>`;
-
-    const subOptions = subs.length
-      ? subs.map(s => `<option value="${s.ID}">${s.Name}</option>`).join("")
-      : `<option value="">No subs found</option>`;
-
-    container.innerHTML = `
-      <div class="animate-in">
-        <div class="section-header">
-          <div>
-            <h2 class="section-title">New IEP Request</h2>
-            <p class="section-subtitle">Schedule a sub for an IEP meeting</p>
-          </div>
-        </div>
-
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;" class="iep-form-grid">
-          <!-- Left: Form -->
-          <div class="card">
-            <div class="card-title" style="margin-bottom:20px;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-              </svg>
-              Request Details
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">Teacher</label>
-              <select class="form-select" id="iep-teacher" onchange="IEPService.onTeacherChange(this.value)">
-                <option value="">— Select teacher —</option>
-                ${teacherOptions}
-              </select>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">IEP Date</label>
-                <input type="date" class="form-input" id="iep-date" value="${todayDateStr()}" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">IEP Meeting Time</label>
-                <input type="time" class="form-input" id="iep-time" onchange="IEPService.onTimeChange(this.value)" />
-                <span class="form-hint">Enter time to auto-highlight periods</span>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">Schedule Type</label>
-              <select class="form-select" id="iep-schedule" onchange="IEPService.onScheduleChange(this.value)">
-                ${scheduleOptions}
-              </select>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">Assign On-Site Sub</label>
-              <select class="form-select" id="iep-sub">
-                <option value="">— Unassigned —</option>
-                ${subOptions}
-              </select>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">Notes (optional)</label>
-              <textarea class="form-textarea" id="iep-notes" placeholder="Any additional notes…"></textarea>
-            </div>
-
-            <div style="display:flex;gap:10px;margin-top:8px;">
-              <button class="btn btn-primary" style="flex:1" onclick="IEPService.submitRequest()">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                Submit Request
-              </button>
-              <button class="btn btn-secondary" onclick="App.navigate('dashboard')">Cancel</button>
-            </div>
-          </div>
-
-          <!-- Right: Period Selector -->
-          <div>
-            <div class="card" style="margin-bottom:16px;">
-              <div class="card-title" style="margin-bottom:4px;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                Periods Needing Coverage
-              </div>
-              <p style="font-size:12px;color:var(--text-3);margin-bottom:16px;">
-                Amber = overlaps with IEP time · Green = selected for coverage · Dashed = PREP / co-teacher
-              </p>
-              <div class="period-grid" id="period-grid">
-                ${buildPeriodGrid("regular")}
-              </div>
-              <div style="margin-top:12px;font-size:12px;color:var(--text-3)" id="selected-periods-hint">
-                No periods selected. Click periods above to mark them for sub coverage.
-              </div>
-            </div>
-
-            <!-- Teacher schedule preview -->
-            <div class="card" id="teacher-schedule-preview" style="display:none;">
-              <div class="card-title" style="margin-bottom:12px;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-                Teacher Schedule
-              </div>
-              <div id="teacher-schedule-content"></div>
-            </div>
-          </div>
-        </div>
+      <div class="form-group">
+        <label class="form-label">Date</label>
+        <input type="date" class="form-input" id="print-date" value="${todayStr}" />
       </div>
-
-      <style>
-        @media (max-width: 820px) {
-          .iep-form-grid { grid-template-columns: 1fr !important; }
-        }
-      </style>
-    `;
-
-    // Set default schedule
-    _formState.selectedSchedule = scheduleTypes.length ? scheduleTypes[0].ID : "regular";
-    const sel = document.getElementById("iep-schedule");
-    if (sel) sel.value = _formState.selectedSchedule;
+      <div style="display:flex;gap:10px;margin-top:8px;">
+        <button class="btn btn-primary" style="flex:1" onclick="PrintService.generateAndPrint()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          Generate & Print
+        </button>
+        <button class="btn btn-secondary" onclick="UI.closeModal()">Cancel</button>
+      </div>
+    `);
   }
 
-  function todayDateStr() {
-    const d = new Date();
-    const yyyy = d.getFullYear();
-    const mm   = String(d.getMonth() + 1).padStart(2, "0");
-    const dd   = String(d.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
-  }
-
-  // ── Build Period Grid ────────────────────────────────────────
-  function buildPeriodGrid(scheduleID) {
-    const periods = ScheduleService.getPeriodsForSchedule(scheduleID);
-    const teachingPeriods = _formState.selectedTeacher
-      ? TeacherService.getTeachingPeriods(_formState.selectedTeacher).map(p => Number(p.Period))
-      : null;
-
-    let html = "";
-    for (let p = 1; p <= 7; p++) {
-      const ptEntry = periods.find(pt => Number(pt.Period) === p);
-      const timeStr = ptEntry ? `${ptEntry.StartTime}–${ptEntry.EndTime}` : "";
-
-      const isHighlighted = _formState.highlightedPeriods.includes(p);
-      const isSelected    = _formState.selectedPeriods.includes(p);
-      const isUnavailable = teachingPeriods !== null && !teachingPeriods.includes(p);
-
-      let cls = "period-cell";
-      if (isUnavailable)  cls += " unavailable";
-      if (isHighlighted && !isSelected) cls += " highlighted";
-      if (isSelected)     cls += " selected";
-
-      const clickAttr = isUnavailable
-        ? ""
-        : `onclick="IEPService.togglePeriod(${p})"`;
-
-      html += `
-        <div class="${cls}" id="period-cell-${p}" ${clickAttr} title="${isUnavailable ? "PREP / Co-Teacher — not eligible" : ""}">
-          <span class="period-num">${p}</span>
-          <span class="period-time">${timeStr || "—"}</span>
-        </div>
-      `;
-    }
-    return html;
-  }
-
-  function refreshPeriodGrid() {
-    const grid = document.getElementById("period-grid");
-    if (!grid) return;
-    grid.innerHTML = buildPeriodGrid(_formState.selectedSchedule);
-    updateSelectedHint();
-  }
-
-  function updateSelectedHint() {
-    const hint = document.getElementById("selected-periods-hint");
-    if (!hint) return;
-    if (_formState.selectedPeriods.length === 0) {
-      hint.textContent = "No periods selected.";
-    } else {
-      hint.innerHTML = `Selected: <strong style="color:var(--green)">Period${_formState.selectedPeriods.length > 1 ? "s" : ""} ${_formState.selectedPeriods.join(", ")}</strong>`;
-    }
-  }
-
-  // ── Toggle Period Selection ───────────────────────────────────
-  function togglePeriod(num) {
-    const idx = _formState.selectedPeriods.indexOf(num);
-    if (idx === -1) {
-      _formState.selectedPeriods.push(num);
-    } else {
-      _formState.selectedPeriods.splice(idx, 1);
-    }
-    refreshPeriodGrid();
-  }
-
-  // ── Teacher Changed ───────────────────────────────────────────
-  function onTeacherChange(teacherID) {
-    _formState.selectedTeacher = teacherID || null;
-    _formState.selectedPeriods = [];
-    refreshPeriodGrid();
-
-    const preview = document.getElementById("teacher-schedule-preview");
-    const content = document.getElementById("teacher-schedule-content");
-    if (!teacherID || !preview || !content) {
-      if (preview) preview.style.display = "none";
+  // ── Generate HTML and trigger print ──────────────────────────
+  function generateAndPrint() {
+    const dateInput = document.getElementById("print-date");
+    if (!dateInput || !dateInput.value) {
+      UI.toast("Please select a date.", "warning");
       return;
     }
 
-    const periods = TeacherService.getTeachingPeriods(teacherID);
-    const { masterSchedule } = App.getState();
-    const allRows = masterSchedule.filter(r => r.TeacherID === teacherID);
+    const dateStr = dateInput.value;
+    const { iepRequests, periodTimes, scheduleTypes } = App.getState();
 
-    if (allRows.length === 0) {
-      content.innerHTML = `<p style="color:var(--text-3);font-size:13px;">No master schedule found for this teacher.</p>`;
-    } else {
-      const rows = allRows.sort((a,b) => Number(a.Period) - Number(b.Period)).map(r => {
-        const isCovered = periods.some(p => Number(p.Period) === Number(r.Period));
-        const badge = isCovered
-          ? `<span class="badge badge-green">Teaching</span>`
-          : `<span class="badge badge-gray">${r.CourseName || r.RoleType || "Excluded"}</span>`;
-        return `<tr>
-          <td style="font-family:var(--font-mono);font-weight:600;">P${r.Period}</td>
-          <td>${r.CourseName || "—"}</td>
-          <td>${r.RoleType || "—"}</td>
-          <td>${badge}</td>
-        </tr>`;
+    // Filter requests for this date
+    const dayRequests = iepRequests.filter(r => r.Date === dateStr && r.Status !== "Cancelled");
+
+    if (dayRequests.length === 0) {
+      UI.toast("No active IEP requests for this date.", "info");
+      return;
+    }
+
+    // Build period time lookup per schedule
+    const ptLookup = {};
+    periodTimes.forEach(pt => {
+      if (!ptLookup[pt.ScheduleID]) ptLookup[pt.ScheduleID] = {};
+      ptLookup[pt.ScheduleID][String(pt.Period)] = `${pt.StartTime}–${pt.EndTime}`;
+    });
+
+    // Format date nicely
+    const dateObj = new Date(dateStr + "T12:00:00");
+    const dateFormatted = dateObj.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+
+    // Group by sub
+    const bySubID = {};
+    const unassigned = [];
+
+    dayRequests.forEach(req => {
+      if (req.AssignedSubID) {
+        if (!bySubID[req.AssignedSubID]) {
+          bySubID[req.AssignedSubID] = {
+            name: req.AssignedSubName || req.AssignedSubID,
+            assignments: []
+          };
+        }
+        bySubID[req.AssignedSubID].assignments.push(req);
+      } else {
+        unassigned.push(req);
+      }
+    });
+
+    // Build print HTML
+    let printHTML = buildPrintHTML(dateFormatted, bySubID, unassigned, ptLookup, scheduleTypes);
+
+    // Open in new window and print
+    const win = window.open("", "_blank", "width=900,height=700");
+    win.document.write(printHTML);
+    win.document.close();
+    setTimeout(() => { win.focus(); win.print(); }, 600);
+
+    UI.closeModal();
+    UI.toast("Print sheet opened.", "success");
+  }
+
+  function buildPrintHTML(dateFormatted, bySubID, unassigned, ptLookup, scheduleTypes) {
+    const schedNames = {};
+    scheduleTypes.forEach(s => { schedNames[s.ID] = s.Name; });
+
+    let subSections = "";
+
+    Object.entries(bySubID).forEach(([subID, sub]) => {
+      const rows = sub.assignments.map(req => {
+        const periods = (req.Periods || "").split(",").filter(Boolean).sort((a,b) => Number(a)-Number(b));
+        const schedID = req.ScheduleType || "regular";
+        const periodCells = periods.map(p => {
+          const timeRange = ptLookup[schedID] && ptLookup[schedID][p] ? ptLookup[schedID][p] : "—";
+          return `<span style="display:inline-block;border:1px solid #ccc;border-radius:4px;padding:3px 8px;margin:2px;font-size:12px;font-family:monospace;">
+            P${p}: ${timeRange}
+          </span>`;
+        }).join("");
+        return `
+          <tr>
+            <td style="font-weight:600;">${req.TeacherName}</td>
+            <td>${req.IEPTime}</td>
+            <td>${schedNames[req.ScheduleType] || req.ScheduleType || "Regular"}</td>
+            <td>${periodCells}</td>
+            <td>${req.Notes || "—"}</td>
+          </tr>
+        `;
       }).join("");
-      content.innerHTML = `
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Period</th><th>Course</th><th>Role</th><th>Status</th></tr></thead>
+
+      subSections += `
+        <div style="page-break-inside:avoid;margin-bottom:32px;">
+          <div style="background:#1a1a2e;color:#fff;padding:12px 16px;border-radius:6px 6px 0 0;display:flex;align-items:center;gap:10px;">
+            <div style="width:32px;height:32px;background:rgba(255,255,255,0.15);border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;">
+              ${sub.name.charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <div style="font-size:16px;font-weight:700;">${sub.name}</div>
+              <div style="font-size:11px;opacity:0.7;">On-Site Substitute — ${sub.assignments.length} assignment${sub.assignments.length !== 1 ? 's' : ''}</div>
+            </div>
+          </div>
+          <table style="width:100%;border-collapse:collapse;border:1px solid #ccc;border-top:none;">
+            <thead>
+              <tr>
+                <th style="background:#f5f5f5;padding:10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border:1px solid #ddd;">Teacher</th>
+                <th style="background:#f5f5f5;padding:10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border:1px solid #ddd;">IEP Time</th>
+                <th style="background:#f5f5f5;padding:10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border:1px solid #ddd;">Schedule</th>
+                <th style="background:#f5f5f5;padding:10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border:1px solid #ddd;">Periods</th>
+                <th style="background:#f5f5f5;padding:10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border:1px solid #ddd;">Notes</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      `;
+    });
+
+    let unassignedSection = "";
+    if (unassigned.length > 0) {
+      const rows = unassigned.map(req => {
+        const periods = (req.Periods || "").split(",").filter(Boolean).join(", ");
+        return `
+          <tr>
+            <td style="padding:10px;border:1px solid #ddd;">${req.TeacherName}</td>
+            <td style="padding:10px;border:1px solid #ddd;">${req.IEPTime}</td>
+            <td style="padding:10px;border:1px solid #ddd;">P${periods}</td>
+            <td style="padding:10px;border:1px solid #ddd;color:#d97706;font-weight:600;">⚠ Needs Sub</td>
+          </tr>
+        `;
+      }).join("");
+      unassignedSection = `
+        <div style="page-break-inside:avoid;margin-bottom:32px;">
+          <div style="background:#7c3aed;color:#fff;padding:12px 16px;border-radius:6px 6px 0 0;font-size:15px;font-weight:700;">
+            ⚠ Unassigned Requests
+          </div>
+          <table style="width:100%;border-collapse:collapse;border:1px solid #ccc;border-top:none;">
+            <thead>
+              <tr>
+                <th style="background:#f5f5f5;padding:10px;text-align:left;font-size:11px;border:1px solid #ddd;">Teacher</th>
+                <th style="background:#f5f5f5;padding:10px;text-align:left;font-size:11px;border:1px solid #ddd;">IEP Time</th>
+                <th style="background:#f5f5f5;padding:10px;text-align:left;font-size:11px;border:1px solid #ddd;">Periods</th>
+                <th style="background:#f5f5f5;padding:10px;text-align:left;font-size:11px;border:1px solid #ddd;">Status</th>
+              </tr>
+            </thead>
             <tbody>${rows}</tbody>
           </table>
         </div>
       `;
     }
-    preview.style.display = "block";
-  }
 
-  // ── IEP Time Changed → auto-highlight periods ─────────────────
-  function onTimeChange(timeVal) {
-    if (!timeVal) {
-      _formState.highlightedPeriods = [];
-      refreshPeriodGrid();
-      return;
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <title>IEP Sub Sheet — ${dateFormatted}</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet"/>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'DM Sans', sans-serif; font-size: 14px; color: #111; background: #fff; padding: 32px; }
+    td { padding: 10px; border: 1px solid #ddd; vertical-align: top; }
+    @media print {
+      body { padding: 16px; }
+      .no-print { display: none; }
     }
-    // Convert 24h "HH:MM" to "H:MM AM/PM"
-    const [hh, mm] = timeVal.split(":").map(Number);
-    const ampm = hh >= 12 ? "PM" : "AM";
-    const h12  = hh === 0 ? 12 : hh > 12 ? hh - 12 : hh;
-    const formatted = `${h12}:${String(mm).padStart(2, "0")} ${ampm}`;
+  </style>
+</head>
+<body>
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:28px;padding-bottom:16px;border-bottom:2px solid #1a1a2e;">
+    <div>
+      <h1 style="font-size:24px;font-weight:700;color:#1a1a2e;">Daily Sub Assignments</h1>
+      <p style="font-size:14px;color:#666;margin-top:4px;">${dateFormatted}</p>
+    </div>
+    <div style="text-align:right;font-size:12px;color:#999;">
+      <div>Printed: ${new Date().toLocaleString()}</div>
+      <div style="margin-top:4px;">IEP Sub Tracker</div>
+    </div>
+  </div>
 
-    _formState.highlightedPeriods = ScheduleService.getOverlappingPeriods(formatted, _formState.selectedSchedule);
-    refreshPeriodGrid();
+  ${subSections}
+  ${unassignedSection}
+
+  <div class="no-print" style="margin-top:24px;text-align:center;">
+    <button onclick="window.print()" style="padding:10px 24px;background:#1a1a2e;color:#fff;border:none;border-radius:6px;font-family:inherit;font-size:14px;cursor:pointer;">
+      Print / Save as PDF
+    </button>
+  </div>
+</body>
+</html>`;
   }
 
-  // ── Schedule Changed ─────────────────────────────────────────
-  function onScheduleChange(scheduleID) {
-    _formState.selectedSchedule = scheduleID;
-    // Re-run time highlight if time is set
-    const timeInput = document.getElementById("iep-time");
-    if (timeInput && timeInput.value) onTimeChange(timeInput.value);
-    else refreshPeriodGrid();
-  }
-
-  // ── Submit Request ────────────────────────────────────────────
-  function submitRequest() {
-    const teacherSel = document.getElementById("iep-teacher");
-    const dateSel    = document.getElementById("iep-date");
-    const timeSel    = document.getElementById("iep-time");
-    const subSel     = document.getElementById("iep-sub");
-    const schedSel   = document.getElementById("iep-schedule");
-    const notesSel   = document.getElementById("iep-notes");
-
-    if (!teacherSel.value) return UI.toast("Please select a teacher.", "warning");
-    if (!dateSel.value)    return UI.toast("Please enter a date.", "warning");
-    if (!timeSel.value)    return UI.toast("Please enter an IEP meeting time.", "warning");
-    if (_formState.selectedPeriods.length === 0) return UI.toast("Please select at least one period.", "warning");
-
-    const { teachers, subs, scheduleTypes } = App.getState();
-    const teacher = teachers.find(t => t.ID === teacherSel.value) || {};
-    const sub     = subs.find(s => s.ID === subSel.value) || {};
-
-    // Format time
-    const [hh, mm] = timeSel.value.split(":").map(Number);
-    const ampm = hh >= 12 ? "PM" : "AM";
-    const h12  = hh === 0 ? 12 : hh > 12 ? hh - 12 : hh;
-    const iepTimeStr = `${h12}:${String(mm).padStart(2, "0")} ${ampm}`;
-
-    const req = {
-      Date:            dateSel.value,
-      TeacherID:       teacherSel.value,
-      TeacherName:     teacher.Name || "",
-      IEPTime:         iepTimeStr,
-      Periods:         _formState.selectedPeriods.join(","),
-      AssignedSubID:   subSel.value || "",
-      AssignedSubName: sub.Name || "",
-      ScheduleType:    schedSel.value || "regular",
-      Notes:           notesSel.value || "",
-      Status:          subSel.value ? "Assigned" : "Pending",
-    };
-
-    google.script.run
-      .withSuccessHandler(() => {
-        UI.toast("IEP request submitted!", "success");
-        App.refreshData(() => App.navigate("upcoming"));
-      })
-      .withFailureHandler(err => UI.toast("Error: " + err.message, "error"))
-      .saveIEPRequest(req);
-  }
-
-  // ── Update IEP (assign sub, cancel, etc.) ────────────────────
-  function updateRequest(req, callback) {
-    google.script.run
-      .withSuccessHandler(() => {
-        App.refreshData(() => {
-          UI.toast("Request updated.", "success");
-          if (callback) callback();
-        });
-      })
-      .withFailureHandler(err => UI.toast("Error: " + err.message, "error"))
-      .saveIEPRequest(req);
-  }
-
-  function deleteRequest(id, callback) {
-    google.script.run
-      .withSuccessHandler(() => {
-        App.refreshData(() => {
-          UI.toast("Request deleted.", "info");
-          if (callback) callback();
-        });
-      })
-      .withFailureHandler(err => UI.toast("Error: " + err.message, "error"))
-      .deleteIEPRequest(id);
-  }
-
-  return {
-    renderNewIEPForm,
-    togglePeriod,
-    onTeacherChange,
-    onTimeChange,
-    onScheduleChange,
-    submitRequest,
-    updateRequest,
-    deleteRequest,
-    getFormState,
-  };
+  return { openModal, generateAndPrint };
 
 })();
 </script>
