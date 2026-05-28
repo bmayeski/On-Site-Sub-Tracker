@@ -1,0 +1,80 @@
+<script>
+/* ============================================================
+   JS_ScheduleService.html — Schedule Types & Period Times
+   ============================================================ */
+
+const ScheduleService = (() => {
+
+  // ── Get period times for a schedule ─────────────────────────
+  function getPeriodsForSchedule(scheduleID) {
+    const { periodTimes } = App.getState();
+    return periodTimes
+      .filter(pt => pt.ScheduleID === scheduleID)
+      .sort((a, b) => Number(a.Period) - Number(b.Period));
+  }
+
+  // ── Format time string ───────────────────────────────────────
+  function parseTime(timeStr) {
+    if (!timeStr) return null;
+    const clean = timeStr.trim().toUpperCase();
+    const match = clean.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
+    if (!match) return null;
+    let h = parseInt(match[1]);
+    const m = parseInt(match[2]);
+    const ampm = match[3];
+    if (ampm === "PM" && h !== 12) h += 12;
+    if (ampm === "AM" && h === 12) h = 0;
+    return h * 60 + m; // minutes since midnight
+  }
+
+  // ── Which periods overlap with an IEP time ───────────────────
+  function getOverlappingPeriods(iepTimeStr, scheduleID) {
+    const iepMinutes = parseTime(iepTimeStr);
+    if (iepMinutes === null) return [];
+
+    const periods = getPeriodsForSchedule(scheduleID);
+    const overlapping = [];
+
+    periods.forEach(p => {
+      const start = parseTime(p.StartTime);
+      const end   = parseTime(p.EndTime);
+      if (start === null || end === null) return;
+      // IEP meeting overlaps if it starts during this period
+      if (iepMinutes >= start && iepMinutes < end) {
+        overlapping.push(Number(p.Period));
+      }
+    });
+
+    return overlapping;
+  }
+
+  // ── Save period times ────────────────────────────────────────
+  function savePeriodTimes(scheduleID, periodsData, callback) {
+    google.script.run
+      .withSuccessHandler(() => {
+        App.refreshData(() => {
+          UI.toast("Period times saved.", "success");
+          if (callback) callback();
+        });
+      })
+      .withFailureHandler(err => UI.toast("Error saving: " + err.message, "error"))
+      .savePeriodTimes(scheduleID, periodsData);
+  }
+
+  // ── Save schedule type ───────────────────────────────────────
+  function saveScheduleType(sched, callback) {
+    google.script.run
+      .withSuccessHandler(() => {
+        App.refreshData(() => {
+          UI.toast("Schedule saved.", "success");
+          if (callback) callback();
+        });
+      })
+      .withFailureHandler(err => UI.toast("Error saving: " + err.message, "error"))
+      .saveScheduleType(sched);
+  }
+
+  return { getPeriodsForSchedule, parseTime, getOverlappingPeriods, savePeriodTimes, saveScheduleType };
+
+})();
+</script>
