@@ -12,15 +12,15 @@ const SHEET_PERIOD_TIMES  = "PeriodTimes";
 
 // ── Sheet IDs ────────────────────────────────────────────────
 const SCHOOL_INFO = {
-  'El Cajon Valley': { logoUrl: 'https://braves.guhsd.net/images/logo.png', primaryColor: '#C70011',  sheetID: '1W5wWl1aAEKLXJbW8fwfFerWGBKVOdKlqrO1Gk2M65U0' },
-  'El Capitan': { logoUrl: 'https://elcapitan.guhsd.net/images/logo.png', primaryColor: '#FFB618',  sheetID: '1ZTYd-GZ1Rkj-duVe0erYPslPpzuyHa9tv7ZO-Nq9Zbo' },
-  'Granite Hills': { logoUrl: 'https://granite.guhsd.net/images/logo.png', primaryColor: '#75B2DD',  sheetID: '1yzHY3gK2hFZqjjD50NuSZiM5sxnRyA-ve0DKVxPhwzw' },
-  'Grossmont': { logoUrl: 'https://www.foothillers.com/images/logo.png', primaryColor: '#2c66b8',  sheetID: '1HNn1btspYUnHlIrW2lF_8l0pqLKZAWjM1DUOLMn88YI' },
-  'Monte Vista': { logoUrl: 'https://montevista.guhsd.net/images/logo.png', primaryColor: '#AC1818',  sheetID: '1EuyNEmW4kwgM2qE0ZbZw1oTP7Xo-MgYhWvRBz55RDeA' },
-  'Mount Miguel': { logoUrl: 'https://mountmiguel.guhsd.net/images/logo.png', primaryColor: '#CF0A2C',  sheetID: '1jeL-MhnWupdkTFoZITYZ5rJR3EwXsiwex9jTJ6Ts1cA' },
-  'Santana': { logoUrl: 'https://santana.guhsd.net/images/logo.png', primaryColor: '#9807e0',  sheetID: '16nr5YPc7nTmMvkeJ9U7k4LqUn2sQUqYawWBIE81iA1Y' },
+  'El Cajon Valley': { logoUrl: 'https://braves.guhsd.net/images/logo.png', primaryColor: '#C70011',  sheetID: '' },
+  'El Capitan': { logoUrl: 'https://elcapitan.guhsd.net/images/logo.png', primaryColor: '#FFB618',  sheetID: '' },
+  'Granite Hills': { logoUrl: 'https://granite.guhsd.net/images/logo.png', primaryColor: '#75B2DD',  sheetID: '' },
+  'Grossmont': { logoUrl: 'https://www.foothillers.com/images/logo.png', primaryColor: '#2c66b8',  sheetID: '' },
+  'Monte Vista': { logoUrl: 'https://montevista.guhsd.net/images/logo.png', primaryColor: '#AC1818',  sheetID: '' },
+  'Mount Miguel': { logoUrl: 'https://mountmiguel.guhsd.net/images/logo.png', primaryColor: '#CF0A2C',  sheetID: '' },
+  'Santana': { logoUrl: 'https://santana.guhsd.net/images/logo.png', primaryColor: '#9807e0',  sheetID: '' },
   'Valhalla': { logoUrl: 'https://valhalla.guhsd.net/images/logo.png', primaryColor: '#FF5F00', sheetID: '1FHTin0DKNoh8tMG9eCL4fmitCJWjJo6QxxDN5yp0JWA' },
-  'West Hills': { logoUrl: 'https://wolfpack.guhsd.net/images/logo.png', primaryColor: '#1f52c2',  sheetID: '1k52wiSp5qfzhuinLbamUBwSqEe7CEe1nvUO4faty6FE' }
+  'West Hills': { logoUrl: 'https://wolfpack.guhsd.net/images/logo.png', primaryColor: '#1f52c2',  sheetID: '' }
 }
 
 // ── Entry Point ──────────────────────────────────────────────
