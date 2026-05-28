@@ -1,0 +1,110 @@
+<script>
+/* ============================================================
+   JS_TeacherService.html — Teachers & On-Site Subs Operations
+   ============================================================ */
+
+const TeacherService = (() => {
+
+  // ── Get teacher's teaching periods (filtered master schedule) ─
+  function getTeachingPeriods(teacherID) {
+    const { masterSchedule } = App.getState();
+    return masterSchedule
+      .filter(row => {
+        if (row.TeacherID !== teacherID) return false;
+        const course = (row.CourseName || "").toUpperCase().trim();
+        const role   = (row.RoleType   || "").toUpperCase().trim();
+        // Exclude PREP periods and co-teacher roles
+        if (course === "PREP") return false;
+        if (role === "CO-TEACHER" || role === "COTEACHER" || role === "CO TEACHER") return false;
+        return true;
+      })
+      .sort((a, b) => Number(a.Period) - Number(b.Period));
+  }
+
+  // ── Save teacher ─────────────────────────────────────────────
+  function saveTeacher(teacher, callback) {
+    google.script.run
+      .withSuccessHandler(() => {
+        App.refreshData(() => {
+          UI.toast("Teacher saved.", "success");
+          if (callback) callback();
+        });
+      })
+      .withFailureHandler(err => UI.toast("Error: " + err.message, "error"))
+      .saveTeacher(teacher);
+  }
+
+  // ── Delete teacher ───────────────────────────────────────────
+  function deleteTeacher(id, callback) {
+    google.script.run
+      .withSuccessHandler(() => {
+        App.refreshData(() => {
+          UI.toast("Teacher removed.", "info");
+          if (callback) callback();
+        });
+      })
+      .withFailureHandler(err => UI.toast("Error: " + err.message, "error"))
+      .deleteTeacher(id);
+  }
+
+  // ── Save sub ─────────────────────────────────────────────────
+  function saveSub(sub, callback) {
+    google.script.run
+      .withSuccessHandler(() => {
+        App.refreshData(() => {
+          UI.toast("Sub saved.", "success");
+          if (callback) callback();
+        });
+      })
+      .withFailureHandler(err => UI.toast("Error: " + err.message, "error"))
+      .saveSub(sub);
+  }
+
+  // ── Delete sub ───────────────────────────────────────────────
+  function deleteSub(id, callback) {
+    google.script.run
+      .withSuccessHandler(() => {
+        App.refreshData(() => {
+          UI.toast("Sub removed.", "info");
+          if (callback) callback();
+        });
+      })
+      .withFailureHandler(err => UI.toast("Error: " + err.message, "error"))
+      .deleteSub(id);
+  }
+
+  // ── Save master schedule row ──────────────────────────────────
+  function saveMasterRow(row, callback) {
+    google.script.run
+      .withSuccessHandler(() => {
+        App.refreshData(() => {
+          UI.toast("Schedule row added.", "success");
+          if (callback) callback();
+        });
+      })
+      .withFailureHandler(err => UI.toast("Error: " + err.message, "error"))
+      .saveMasterScheduleRow(row);
+  }
+
+  // ── Clear teacher schedule ────────────────────────────────────
+  function clearTeacherSchedule(teacherID, callback) {
+    google.script.run
+      .withSuccessHandler(() => {
+        App.refreshData(() => {
+          UI.toast("Schedule cleared.", "info");
+          if (callback) callback();
+        });
+      })
+      .withFailureHandler(err => UI.toast("Error: " + err.message, "error"))
+      .clearTeacherSchedule(teacherID);
+  }
+
+  return {
+    getTeachingPeriods,
+    saveTeacher, deleteTeacher,
+    saveSub, deleteSub,
+    saveMasterRow, clearTeacherSchedule
+  };
+
+})();
+</script>
