@@ -1,381 +1,478 @@
 <script>
 /* ============================================================
-   JS_IEPService.html — IEP Requests, Period Highlighting,
-                        Sub Assignment
+   JS_AdminPanel.html — Admin Panel Views
    ============================================================ */
 
-const IEPService = (() => {
+const AdminPanel = (() => {
 
-  // ── Internal state for new IEP form ──────────────────────────
-  let _formState = {
-    selectedPeriods:   [],
-    highlightedPeriods: [],
-    selectedSchedule:  "regular",
-    selectedTeacher:   null,
-  };
+  // ══════════════════════════════════════════════════════════════
+  // PEOPLE — Teachers & Subs
+  // ══════════════════════════════════════════════════════════════
 
-  function resetForm() {
-    _formState = {
-      selectedPeriods:    [],
-      highlightedPeriods: [],
-      selectedSchedule:   "regular",
-      selectedTeacher:    null,
-    };
+  let _peopleTab = "teachers";
+
+  function renderPeople(container) {
+    container.innerHTML = `
+      <div class="animate-in">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">Teachers & On-Site Subs</h2>
+            <p class="section-subtitle">Manage who's in the system</p>
+          </div>
+        </div>
+        <div class="tabs">
+          <div class="tab-btn ${_peopleTab === "teachers" ? "active" : ""}" onclick="AdminPanel.switchPeopleTab('teachers')">Teachers</div>
+          <div class="tab-btn ${_peopleTab === "subs" ? "active" : ""}" onclick="AdminPanel.switchPeopleTab('subs')">On-Site Subs</div>
+        </div>
+        <div id="people-tab-content"></div>
+      </div>
+    `;
+    renderPeopleTab();
   }
 
-  function getFormState() { return _formState; }
+  function switchPeopleTab(tab) {
+    _peopleTab = tab;
+    document.querySelectorAll(".tab-btn").forEach(el => {
+      el.classList.toggle("active", el.textContent.toLowerCase().includes(tab === "teachers" ? "teacher" : "sub"));
+    });
+    renderPeopleTab();
+  }
 
-  // ── Build the New IEP HTML ───────────────────────────────────
-  function renderNewIEPForm(container) {
-    resetForm();
-    const { teachers, subs, scheduleTypes } = App.getState();
+  function renderPeopleTab() {
+    const content = document.getElementById("people-tab-content");
+    if (!content) return;
+    const { teachers, subs } = App.getState();
+    const isTeachers = _peopleTab === "teachers";
+    const list = isTeachers ? teachers : subs;
+    const label = isTeachers ? "Teacher" : "On-Site Sub";
 
-    const scheduleOptions = scheduleTypes
-      .map(s => `<option value="${s.ID}">${s.Name}</option>`)
-      .join("");
+    const rows = list.length ? list.map(p => `
+      <tr>
+        <td>${p.Name}</td>
+        <td>${p.Email || "—"}</td>
+        <td>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-ghost btn-sm" onclick="AdminPanel.editPerson('${p.ID}','${isTeachers ? "teacher" : "sub"}')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              Edit
+            </button>
+            <button class="btn btn-danger btn-sm" onclick="AdminPanel.confirmDelete('${p.ID}','${isTeachers ? "teacher" : "sub"}','${p.Name.replace(/'/g, "\\'")}')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+              Remove
+            </button>
+          </div>
+        </td>
+      </tr>
+    `).join("") : `<tr><td colspan="3"><div class="empty-state" style="padding:32px 0;"><div class="empty-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div><h3>No ${label}s yet</h3><p>Add your first ${label.toLowerCase()} below.</p></div></td></tr>`;
 
-    const teacherOptions = teachers.length
-      ? teachers.map(t => `<option value="${t.ID}">${t.Name}</option>`).join("")
-      : `<option value="">No teachers found</option>`;
+    content.innerHTML = `
+      <div class="action-bar">
+        <div class="search-bar" style="width:280px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" placeholder="Search ${label.toLowerCase()}s…" oninput="AdminPanel.filterTable(this.value,'people-table')" />
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="AdminPanel.editPerson(null,'${isTeachers ? "teacher" : "sub"}')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add ${label}
+        </button>
+      </div>
+      <div class="table-wrap">
+        <table id="people-table">
+          <thead><tr><th>Name</th><th>Email</th><th>Actions</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+  }
 
-    const subOptions = subs.length
-      ? subs.map(s => `<option value="${s.ID}">${s.Name}</option>`).join("")
-      : `<option value="">No subs found</option>`;
+  function editPerson(id, type) {
+    const { teachers, subs } = App.getState();
+    const list = type === "teacher" ? teachers : subs;
+    const person = id ? list.find(p => p.ID === id) : null;
+    const label  = type === "teacher" ? "Teacher" : "On-Site Sub";
+
+    UI.openModalWith(`
+      <h2 style="font-family:var(--font-display);font-size:20px;margin-bottom:20px;">${person ? "Edit" : "Add"} ${label}</h2>
+      <div class="form-group">
+        <label class="form-label">Full Name</label>
+        <input type="text" class="form-input" id="person-name" value="${person ? person.Name : ""}" placeholder="Jane Smith" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email (optional)</label>
+        <input type="email" class="form-input" id="person-email" value="${person ? (person.Email || "") : ""}" placeholder="jane@school.edu" />
+      </div>
+      <div style="display:flex;gap:10px;margin-top:8px;">
+        <button class="btn btn-primary" style="flex:1" onclick="AdminPanel.savePerson('${id || ""}','${type}')">
+          ${person ? "Save Changes" : `Add ${label}`}
+        </button>
+        <button class="btn btn-secondary" onclick="UI.closeModal()">Cancel</button>
+      </div>
+    `);
+  }
+
+  function savePerson(id, type) {
+    const name  = document.getElementById("person-name").value.trim();
+    const email = document.getElementById("person-email").value.trim();
+    if (!name) return UI.toast("Name is required.", "warning");
+
+    const obj = { ID: id || undefined, Name: name, Email: email, Active: true };
+    const fn   = type === "teacher" ? TeacherService.saveTeacher : TeacherService.saveSub;
+
+    UI.closeModal();
+    fn(obj, () => renderPeople(document.getElementById("view-container")));
+  }
+
+  function confirmDelete(id, type, name) {
+    UI.openModalWith(`
+      <div style="text-align:center;padding:16px 0;">
+        <div class="empty-icon" style="margin:0 auto 16px;color:var(--red);background:var(--red-dim);width:56px;height:56px;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+        </div>
+        <h2 style="font-size:18px;margin-bottom:8px;">Remove ${name}?</h2>
+        <p style="color:var(--text-3);font-size:13px;margin-bottom:24px;">This will mark them inactive. IEP history is preserved.</p>
+        <div style="display:flex;gap:10px;justify-content:center;">
+          <button class="btn btn-danger" onclick="AdminPanel.deletePerson('${id}','${type}')">Yes, Remove</button>
+          <button class="btn btn-secondary" onclick="UI.closeModal()">Cancel</button>
+        </div>
+      </div>
+    `);
+  }
+
+  function deletePerson(id, type) {
+    UI.closeModal();
+    const fn = type === "teacher" ? TeacherService.deleteTeacher : TeacherService.deleteSub;
+    fn(id, () => renderPeople(document.getElementById("view-container")));
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // SCHEDULE — Schedule Types & Period Times
+  // ══════════════════════════════════════════════════════════════
+
+  function renderSchedule(container) {
+    const { scheduleTypes } = App.getState();
+
+    const schedCards = scheduleTypes.map(s => `
+      <div class="card" style="margin-bottom:24px;">
+        <div class="card-header">
+          <div class="card-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            ${s.Name}
+          </div>
+          <span class="badge badge-green"><span class="badge-dot"></span> Active</span>
+        </div>
+        <p style="font-size:12px;color:var(--text-3);margin-bottom:16px;">Configure period start and end times for this schedule type.</p>
+        ${renderPeriodTimeEditor(s.ID)}
+        <div style="margin-top:16px;">
+          <button class="btn btn-primary btn-sm" onclick="AdminPanel.savePeriodTimes('${s.ID}')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            Save Period Times
+          </button>
+        </div>
+      </div>
+    `).join("");
 
     container.innerHTML = `
       <div class="animate-in">
         <div class="section-header">
           <div>
-            <h2 class="section-title">New IEP Request</h2>
-            <p class="section-subtitle">Schedule a sub for an IEP meeting</p>
+            <h2 class="section-title">Schedule & Period Times</h2>
+            <p class="section-subtitle">Set start/end times for each period per schedule type</p>
           </div>
+          <button class="btn btn-primary btn-sm" onclick="AdminPanel.addScheduleType()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            New Schedule Type
+          </button>
         </div>
-
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;" class="iep-form-grid">
-          <!-- Left: Form -->
-          <div class="card">
-            <div class="card-title" style="margin-bottom:20px;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-              </svg>
-              Request Details
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">Teacher</label>
-              <select class="form-select" id="iep-teacher" onchange="IEPService.onTeacherChange(this.value)">
-                <option value="">— Select teacher —</option>
-                ${teacherOptions}
-              </select>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">IEP Date</label>
-                <input type="date" class="form-input" id="iep-date" value="${todayDateStr()}" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">IEP Meeting Time</label>
-                <input type="time" class="form-input" id="iep-time" onchange="IEPService.onTimeChange(this.value)" />
-                <span class="form-hint">Enter time to auto-highlight periods</span>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">Schedule Type</label>
-              <select class="form-select" id="iep-schedule" onchange="IEPService.onScheduleChange(this.value)">
-                ${scheduleOptions}
-              </select>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">Assign On-Site Sub</label>
-              <select class="form-select" id="iep-sub">
-                <option value="">— Unassigned —</option>
-                ${subOptions}
-              </select>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">Notes (optional)</label>
-              <textarea class="form-textarea" id="iep-notes" placeholder="Any additional notes…"></textarea>
-            </div>
-
-            <div style="display:flex;gap:10px;margin-top:8px;">
-              <button class="btn btn-primary" style="flex:1" onclick="IEPService.submitRequest()">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                Submit Request
-              </button>
-              <button class="btn btn-secondary" onclick="App.navigate('dashboard')">Cancel</button>
-            </div>
-          </div>
-
-          <!-- Right: Period Selector -->
-          <div>
-            <div class="card" style="margin-bottom:16px;">
-              <div class="card-title" style="margin-bottom:4px;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                Periods Needing Coverage
-              </div>
-              <p style="font-size:12px;color:var(--text-3);margin-bottom:16px;">
-                Amber = overlaps with IEP time · Green = selected for coverage · Dashed = PREP / co-teacher
-              </p>
-              <div class="period-grid" id="period-grid">
-                ${buildPeriodGrid("regular")}
-              </div>
-              <div style="margin-top:12px;font-size:12px;color:var(--text-3)" id="selected-periods-hint">
-                No periods selected. Click periods above to mark them for sub coverage.
-              </div>
-            </div>
-
-            <!-- Teacher schedule preview -->
-            <div class="card" id="teacher-schedule-preview" style="display:none;">
-              <div class="card-title" style="margin-bottom:12px;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-                Teacher Schedule
-              </div>
-              <div id="teacher-schedule-content"></div>
-            </div>
-          </div>
-        </div>
+        ${schedCards || '<div class="empty-state"><p>No schedule types found. Initialize the spreadsheet first.</p></div>'}
       </div>
-
-      <style>
-        @media (max-width: 820px) {
-          .iep-form-grid { grid-template-columns: 1fr !important; }
-        }
-      </style>
     `;
-
-    // Set default schedule
-    _formState.selectedSchedule = scheduleTypes.length ? scheduleTypes[0].ID : "regular";
-    const sel = document.getElementById("iep-schedule");
-    if (sel) sel.value = _formState.selectedSchedule;
   }
 
-  function todayDateStr() {
-    const d = new Date();
-    const yyyy = d.getFullYear();
-    const mm   = String(d.getMonth() + 1).padStart(2, "0");
-    const dd   = String(d.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
-  }
-
-  // ── Build Period Grid ────────────────────────────────────────
-  function buildPeriodGrid(scheduleID) {
+  function renderPeriodTimeEditor(scheduleID) {
     const periods = ScheduleService.getPeriodsForSchedule(scheduleID);
-    const teachingPeriods = _formState.selectedTeacher
-      ? TeacherService.getTeachingPeriods(_formState.selectedTeacher).map(p => Number(p.Period))
-      : null;
-
-    let html = "";
-    for (let p = 1; p <= 7; p++) {
-      const ptEntry = periods.find(pt => Number(pt.Period) === p);
-      const timeStr = ptEntry ? `${ptEntry.StartTime}–${ptEntry.EndTime}` : "";
-
-      const isHighlighted = _formState.highlightedPeriods.includes(p);
-      const isSelected    = _formState.selectedPeriods.includes(p);
-      const isUnavailable = teachingPeriods !== null && !teachingPeriods.includes(p);
-
-      let cls = "period-cell";
-      if (isUnavailable)  cls += " unavailable";
-      if (isHighlighted && !isSelected) cls += " highlighted";
-      if (isSelected)     cls += " selected";
-
-      const clickAttr = isUnavailable
-        ? ""
-        : `onclick="IEPService.togglePeriod(${p})"`;
-
-      html += `
-        <div class="${cls}" id="period-cell-${p}" ${clickAttr} title="${isUnavailable ? "PREP / Co-Teacher — not eligible" : ""}">
-          <span class="period-num">${p}</span>
-          <span class="period-time">${timeStr || "—"}</span>
+    const rows = Array.from({ length: 7 }, (_, i) => {
+      const p = i + 1;
+      const entry = periods.find(pt => Number(pt.Period) === p);
+      return `
+        <div style="display:grid;grid-template-columns:40px 1fr 1fr;gap:10px;align-items:center;margin-bottom:8px;">
+          <div style="font-family:var(--font-mono);font-weight:700;color:var(--accent);font-size:14px;">P${p}</div>
+          <div>
+            <input type="text" class="form-input form-input-sm" id="pt-${scheduleID}-${p}-start"
+              value="${entry ? entry.StartTime : ""}" placeholder="8:00 AM" style="font-size:12px;padding:7px 10px;" />
+          </div>
+          <div>
+            <input type="text" class="form-input form-input-sm" id="pt-${scheduleID}-${p}-end"
+              value="${entry ? entry.EndTime : ""}" placeholder="8:52 AM" style="font-size:12px;padding:7px 10px;" />
+          </div>
         </div>
       `;
-    }
-    return html;
+    }).join("");
+
+    return `
+      <div style="background:var(--bg-3);border-radius:var(--radius-sm);padding:16px;">
+        <div style="display:grid;grid-template-columns:40px 1fr 1fr;gap:10px;margin-bottom:10px;">
+          <div></div>
+          <div style="font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;">Start Time</div>
+          <div style="font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;">End Time</div>
+        </div>
+        ${rows}
+      </div>
+    `;
   }
 
-  function refreshPeriodGrid() {
-    const grid = document.getElementById("period-grid");
-    if (!grid) return;
-    grid.innerHTML = buildPeriodGrid(_formState.selectedSchedule);
-    updateSelectedHint();
+  function savePeriodTimes(scheduleID) {
+    const periods = [];
+    for (let p = 1; p <= 7; p++) {
+      const startEl = document.getElementById(`pt-${scheduleID}-${p}-start`);
+      const endEl   = document.getElementById(`pt-${scheduleID}-${p}-end`);
+      const start   = startEl ? startEl.value.trim() : "";
+      const end     = endEl   ? endEl.value.trim()   : "";
+      if (start && end) {
+        periods.push({ period: p, startTime: start, endTime: end });
+      }
+    }
+    if (periods.length === 0) return UI.toast("No period times to save.", "warning");
+    ScheduleService.savePeriodTimes(scheduleID, periods, () =>
+      renderSchedule(document.getElementById("view-container"))
+    );
   }
 
-  function updateSelectedHint() {
-    const hint = document.getElementById("selected-periods-hint");
-    if (!hint) return;
-    if (_formState.selectedPeriods.length === 0) {
-      hint.textContent = "No periods selected.";
-    } else {
-      hint.innerHTML = `Selected: <strong style="color:var(--green)">Period${_formState.selectedPeriods.length > 1 ? "s" : ""} ${_formState.selectedPeriods.join(", ")}</strong>`;
-    }
+  function addScheduleType() {
+    UI.openModalWith(`
+      <h2 style="font-family:var(--font-display);font-size:20px;margin-bottom:20px;">New Schedule Type</h2>
+      <div class="form-group">
+        <label class="form-label">Schedule Name</label>
+        <input type="text" class="form-input" id="sched-name" placeholder="e.g. Finals Week" />
+      </div>
+      <div style="display:flex;gap:10px;margin-top:8px;">
+        <button class="btn btn-primary" style="flex:1" onclick="AdminPanel.saveNewScheduleType()">Add Schedule</button>
+        <button class="btn btn-secondary" onclick="UI.closeModal()">Cancel</button>
+      </div>
+    `);
   }
 
-  // ── Toggle Period Selection ───────────────────────────────────
-  function togglePeriod(num) {
-    const idx = _formState.selectedPeriods.indexOf(num);
-    if (idx === -1) {
-      _formState.selectedPeriods.push(num);
-    } else {
-      _formState.selectedPeriods.splice(idx, 1);
-    }
-    refreshPeriodGrid();
+  function saveNewScheduleType() {
+    const name = document.getElementById("sched-name").value.trim();
+    if (!name) return UI.toast("Name required.", "warning");
+    UI.closeModal();
+    ScheduleService.saveScheduleType({ Name: name, Active: true }, () =>
+      renderSchedule(document.getElementById("view-container"))
+    );
   }
 
-  // ── Teacher Changed ───────────────────────────────────────────
-  function onTeacherChange(teacherID) {
-    _formState.selectedTeacher = teacherID || null;
-    _formState.selectedPeriods = [];
-    refreshPeriodGrid();
+  // ══════════════════════════════════════════════════════════════
+  // MASTER SCHEDULE
+  // ══════════════════════════════════════════════════════════════
 
-    const preview = document.getElementById("teacher-schedule-preview");
-    const content = document.getElementById("teacher-schedule-content");
-    if (!teacherID || !preview || !content) {
-      if (preview) preview.style.display = "none";
-      return;
-    }
+  let _masterTeacherFilter = "";
 
-    const periods = TeacherService.getTeachingPeriods(teacherID);
-    const { masterSchedule } = App.getState();
-    const allRows = masterSchedule.filter(r => r.TeacherID === teacherID);
+  function renderMaster(container) {
+    const { teachers, masterSchedule } = App.getState();
 
-    if (allRows.length === 0) {
-      content.innerHTML = `<p style="color:var(--text-3);font-size:13px;">No master schedule found for this teacher.</p>`;
-    } else {
-      const rows = allRows.sort((a,b) => Number(a.Period) - Number(b.Period)).map(r => {
-        const isCovered = periods.some(p => Number(p.Period) === Number(r.Period));
+    const teacherOptions = teachers.map(t => `<option value="${t.ID}">${t.Name}</option>`).join("");
+
+    // Build master schedule table grouped by teacher
+    const byTeacher = {};
+    masterSchedule.forEach(row => {
+      if (!byTeacher[row.TeacherID]) byTeacher[row.TeacherID] = { name: row.TeacherName, rows: [] };
+      byTeacher[row.TeacherID].rows.push(row);
+    });
+
+    const filteredTeachers = _masterTeacherFilter
+      ? teachers.filter(t => t.ID === _masterTeacherFilter)
+      : teachers;
+
+    const tableRows = filteredTeachers.flatMap(t => {
+      const data = byTeacher[t.ID] || { name: t.Name, rows: [] };
+      if (data.rows.length === 0) {
+        return [`<tr>
+          <td style="font-weight:700;">${t.Name}</td>
+          <td colspan="3" style="color:var(--text-3);font-style:italic;">No schedule entries</td>
+          <td><button class="btn btn-primary btn-sm" onclick="AdminPanel.addMasterRow('${t.ID}','${t.Name.replace(/'/g, "\\'")}')">+ Add Period</button></td>
+        </tr>`];
+      }
+      return data.rows.sort((a,b) => Number(a.Period) - Number(b.Period)).map((r, i) => {
+        const isCovered = (r.CourseName || "").toUpperCase() !== "PREP" &&
+          !["CO-TEACHER","COTEACHER","CO TEACHER"].includes((r.RoleType || "").toUpperCase());
         const badge = isCovered
           ? `<span class="badge badge-green">Teaching</span>`
-          : `<span class="badge badge-gray">${r.CourseName || r.RoleType || "Excluded"}</span>`;
+          : `<span class="badge badge-gray">Excluded</span>`;
         return `<tr>
+          <td style="font-weight:700;">${i === 0 ? t.Name : ""}</td>
           <td style="font-family:var(--font-mono);font-weight:600;">P${r.Period}</td>
           <td>${r.CourseName || "—"}</td>
           <td>${r.RoleType || "—"}</td>
           <td>${badge}</td>
+          ${i === 0 ? `<td rowspan="${data.rows.length}" style="vertical-align:top;padding-top:12px;">
+            <button class="btn btn-ghost btn-sm" onclick="AdminPanel.addMasterRow('${t.ID}','${t.Name.replace(/'/g, "\\'")}')">+ Period</button>
+            <button class="btn btn-danger btn-sm" style="margin-top:4px;" onclick="AdminPanel.confirmClearSchedule('${t.ID}','${t.Name.replace(/'/g, "\\'")}')">Clear All</button>
+          </td>` : ""}
         </tr>`;
-      }).join("");
-      content.innerHTML = `
+      });
+    }).join("");
+
+    container.innerHTML = `
+      <div class="animate-in">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">Master Schedule</h2>
+            <p class="section-subtitle">Configure which periods each teacher teaches (PREP & Co-Teacher roles are auto-excluded)</p>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="AdminPanel.addMasterRow('','')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add Entry
+          </button>
+        </div>
+
+        <div class="action-bar" style="margin-bottom:16px;">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <label class="form-label" style="white-space:nowrap;margin:0;">Filter Teacher:</label>
+            <select class="form-select" style="width:220px;" onchange="AdminPanel.filterMaster(this.value)">
+              <option value="">All Teachers</option>
+              ${teacherOptions}
+            </select>
+          </div>
+          <div style="display:flex;gap:8px;font-size:12px;color:var(--text-3);align-items:center;">
+            <span class="badge badge-green">Teaching</span> = included in sub coverage &nbsp;
+            <span class="badge badge-gray">Excluded</span> = PREP or Co-Teacher
+          </div>
+        </div>
+
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Period</th><th>Course</th><th>Role</th><th>Status</th></tr></thead>
-            <tbody>${rows}</tbody>
+            <thead>
+              <tr>
+                <th>Teacher</th><th>Period</th><th>Course</th><th>Role</th><th>Status</th><th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRows || `<tr><td colspan="6"><div class="empty-state" style="padding:32px 0;">
+                <div class="empty-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/></svg></div>
+                <h3>No master schedule data</h3><p>Add entries for each teacher's periods.</p>
+              </div></td></tr>`}
+            </tbody>
           </table>
         </div>
-      `;
+      </div>
+    `;
+
+    if (_masterTeacherFilter) {
+      const sel = container.querySelector("select");
+      if (sel) sel.value = _masterTeacherFilter;
     }
-    preview.style.display = "block";
   }
 
-  // ── IEP Time Changed → auto-highlight periods ─────────────────
-  function onTimeChange(timeVal) {
-    if (!timeVal) {
-      _formState.highlightedPeriods = [];
-      refreshPeriodGrid();
-      return;
-    }
-    // Convert 24h "HH:MM" to "H:MM AM/PM"
-    const [hh, mm] = timeVal.split(":").map(Number);
-    const ampm = hh >= 12 ? "PM" : "AM";
-    const h12  = hh === 0 ? 12 : hh > 12 ? hh - 12 : hh;
-    const formatted = `${h12}:${String(mm).padStart(2, "0")} ${ampm}`;
-
-    _formState.highlightedPeriods = ScheduleService.getOverlappingPeriods(formatted, _formState.selectedSchedule);
-    refreshPeriodGrid();
+  function filterMaster(teacherID) {
+    _masterTeacherFilter = teacherID;
+    renderMaster(document.getElementById("view-container"));
   }
 
-  // ── Schedule Changed ─────────────────────────────────────────
-  function onScheduleChange(scheduleID) {
-    _formState.selectedSchedule = scheduleID;
-    // Re-run time highlight if time is set
-    const timeInput = document.getElementById("iep-time");
-    if (timeInput && timeInput.value) onTimeChange(timeInput.value);
-    else refreshPeriodGrid();
+  function addMasterRow(teacherID, teacherName) {
+    const { teachers } = App.getState();
+    const teacherOptions = teachers.map(t =>
+      `<option value="${t.ID}" ${t.ID === teacherID ? "selected" : ""}>${t.Name}</option>`
+    ).join("");
+
+    UI.openModalWith(`
+      <h2 style="font-family:var(--font-display);font-size:20px;margin-bottom:20px;">Add Schedule Entry</h2>
+      <div class="form-group">
+        <label class="form-label">Teacher</label>
+        <select class="form-select" id="ms-teacher">
+          <option value="">— Select —</option>
+          ${teacherOptions}
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Period (1–7)</label>
+          <input type="number" class="form-input" id="ms-period" min="1" max="7" placeholder="1" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Role Type</label>
+          <select class="form-select" id="ms-role">
+            <option value="Teacher">Teacher (Main)</option>
+            <option value="Co-Teacher">Co-Teacher</option>
+            <option value="PREP">PREP</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Course Name</label>
+        <input type="text" class="form-input" id="ms-course" placeholder="e.g. Algebra 1, PREP" />
+        <span class="form-hint">Enter "PREP" to mark as prep period (auto-excluded from sub coverage)</span>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:8px;">
+        <button class="btn btn-primary" style="flex:1" onclick="AdminPanel.saveMasterRow()">Add Entry</button>
+        <button class="btn btn-secondary" onclick="UI.closeModal()">Cancel</button>
+      </div>
+    `);
   }
 
-  // ── Submit Request ────────────────────────────────────────────
-  function submitRequest() {
-    const teacherSel = document.getElementById("iep-teacher");
-    const dateSel    = document.getElementById("iep-date");
-    const timeSel    = document.getElementById("iep-time");
-    const subSel     = document.getElementById("iep-sub");
-    const schedSel   = document.getElementById("iep-schedule");
-    const notesSel   = document.getElementById("iep-notes");
+  function saveMasterRow() {
+    const teacherID  = document.getElementById("ms-teacher").value;
+    const period     = document.getElementById("ms-period").value;
+    const course     = document.getElementById("ms-course").value.trim();
+    const role       = document.getElementById("ms-role").value;
 
-    if (!teacherSel.value) return UI.toast("Please select a teacher.", "warning");
-    if (!dateSel.value)    return UI.toast("Please enter a date.", "warning");
-    if (!timeSel.value)    return UI.toast("Please enter an IEP meeting time.", "warning");
-    if (_formState.selectedPeriods.length === 0) return UI.toast("Please select at least one period.", "warning");
+    if (!teacherID) return UI.toast("Select a teacher.", "warning");
+    if (!period)    return UI.toast("Enter a period.", "warning");
+    if (!course)    return UI.toast("Enter a course name.", "warning");
 
-    const { teachers, subs, scheduleTypes } = App.getState();
-    const teacher = teachers.find(t => t.ID === teacherSel.value) || {};
-    const sub     = subs.find(s => s.ID === subSel.value) || {};
+    const { teachers } = App.getState();
+    const teacher = teachers.find(t => t.ID === teacherID);
 
-    // Format time
-    const [hh, mm] = timeSel.value.split(":").map(Number);
-    const ampm = hh >= 12 ? "PM" : "AM";
-    const h12  = hh === 0 ? 12 : hh > 12 ? hh - 12 : hh;
-    const iepTimeStr = `${h12}:${String(mm).padStart(2, "0")} ${ampm}`;
-
-    const req = {
-      Date:            dateSel.value,
-      TeacherID:       teacherSel.value,
-      TeacherName:     teacher.Name || "",
-      IEPTime:         iepTimeStr,
-      Periods:         _formState.selectedPeriods.join(","),
-      AssignedSubID:   subSel.value || "",
-      AssignedSubName: sub.Name || "",
-      ScheduleType:    schedSel.value || "regular",
-      Notes:           notesSel.value || "",
-      Status:          subSel.value ? "Assigned" : "Pending",
-    };
-
-    google.script.run
-      .withSuccessHandler(() => {
-        UI.toast("IEP request submitted!", "success");
-        App.refreshData(() => App.navigate("upcoming"));
-      })
-      .withFailureHandler(err => UI.toast("Error: " + err.message, "error"))
-      .saveIEPRequest(req);
+    UI.closeModal();
+    TeacherService.saveMasterRow({
+      TeacherID: teacherID,
+      TeacherName: teacher ? teacher.Name : "",
+      Period: Number(period),
+      CourseName: course,
+      RoleType: role,
+    }, () => renderMaster(document.getElementById("view-container")));
   }
 
-  // ── Update IEP (assign sub, cancel, etc.) ────────────────────
-  function updateRequest(req, callback) {
-    google.script.run
-      .withSuccessHandler(() => {
-        App.refreshData(() => {
-          UI.toast("Request updated.", "success");
-          if (callback) callback();
-        });
-      })
-      .withFailureHandler(err => UI.toast("Error: " + err.message, "error"))
-      .saveIEPRequest(req);
+  function confirmClearSchedule(teacherID, name) {
+    UI.openModalWith(`
+      <div style="text-align:center;padding:16px 0;">
+        <div class="empty-icon" style="margin:0 auto 16px;color:var(--red);background:var(--red-dim);width:56px;height:56px;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+        </div>
+        <h2 style="font-size:18px;margin-bottom:8px;">Clear ${name}'s schedule?</h2>
+        <p style="color:var(--text-3);font-size:13px;margin-bottom:24px;">All period entries for this teacher will be deleted.</p>
+        <div style="display:flex;gap:10px;justify-content:center;">
+          <button class="btn btn-danger" onclick="AdminPanel.clearSchedule('${teacherID}')">Yes, Clear</button>
+          <button class="btn btn-secondary" onclick="UI.closeModal()">Cancel</button>
+        </div>
+      </div>
+    `);
   }
 
-  function deleteRequest(id, callback) {
-    google.script.run
-      .withSuccessHandler(() => {
-        App.refreshData(() => {
-          UI.toast("Request deleted.", "info");
-          if (callback) callback();
-        });
-      })
-      .withFailureHandler(err => UI.toast("Error: " + err.message, "error"))
-      .deleteIEPRequest(id);
+  function clearSchedule(teacherID) {
+    UI.closeModal();
+    TeacherService.clearTeacherSchedule(teacherID, () =>
+      renderMaster(document.getElementById("view-container"))
+    );
+  }
+
+  // ── Table filter helper ───────────────────────────────────────
+  function filterTable(query, tableID) {
+    const table = document.getElementById(tableID);
+    if (!table) return;
+    const q = query.toLowerCase();
+    table.querySelectorAll("tbody tr").forEach(row => {
+      const text = row.textContent.toLowerCase();
+      row.style.display = text.includes(q) ? "" : "none";
+    });
   }
 
   return {
-    renderNewIEPForm,
-    togglePeriod,
-    onTeacherChange,
-    onTimeChange,
-    onScheduleChange,
-    submitRequest,
-    updateRequest,
-    deleteRequest,
-    getFormState,
+    renderPeople, switchPeopleTab,
+    editPerson, savePerson, confirmDelete, deletePerson,
+    renderSchedule, savePeriodTimes, addScheduleType, saveNewScheduleType,
+    renderMaster, filterMaster, addMasterRow, saveMasterRow,
+    confirmClearSchedule, clearSchedule,
+    filterTable,
   };
 
 })();
